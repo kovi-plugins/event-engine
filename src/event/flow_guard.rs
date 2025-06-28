@@ -92,7 +92,7 @@ impl<T: Event> FlowGuard<T> {
     }
 
     /// 发送通知
-    pub async fn send(&self, notice: impl AsRef<str>) {
+    pub fn send(&self, notice: impl AsRef<str>) {
         let notice = notice.as_ref().to_string();
 
         let notice = Arc::new(notice);
