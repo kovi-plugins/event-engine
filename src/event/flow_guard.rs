@@ -1,6 +1,14 @@
 use ahash::HashSet;
-use kovi::{event::Event, tokio::sync::broadcast};
+use kovi::{
+    event::Event,
+    tokio::{self, sync::broadcast},
+};
 use std::sync::{Arc, Mutex};
+
+pub enum WaitError {
+    Timeout,
+    Broadcast(broadcast::error::RecvError),
+}
 
 /// 流程守卫，用于确保事件按顺序执行
 ///
@@ -36,6 +44,29 @@ impl<T: Event> Event for FlowGuard<T> {
 }
 
 impl<T: Event> FlowGuard<T> {
+    /// 等待特定通知, 会检查历史记录和未来通知
+    pub async fn wait_with_timeout(
+        &self,
+        notice: impl AsRef<str>,
+        timeout: tokio::time::Duration,
+    ) -> Result<(), WaitError> {
+        let timeout_fut = tokio::time::sleep(timeout);
+
+        tokio::pin!(timeout_fut);
+
+        tokio::select! {
+            biased;
+
+            result = self.wait(notice) => {
+                result.map_err(|err| {WaitError::Broadcast(err)})
+            }
+
+            _ = &mut timeout_fut => {
+                return Err(WaitError::Timeout);
+            }
+        }
+    }
+
     /// 等待特定通知, 会检查历史记录和未来通知
     pub async fn wait(&self, notice: impl AsRef<str>) -> Result<(), broadcast::error::RecvError> {
         let notice = notice.as_ref().to_string();
