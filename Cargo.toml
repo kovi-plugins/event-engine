@@ -2,13 +2,12 @@
 name = "kovi-plugin-event-engine"
 version = "0.1.0"
 edition = "2024"
-description = "A OneBot V11 bot plugin framework"
+description = "kovi's event engine"
 license = "MPL-2.0"
 authors = ["ThriceCola <thricecola@hotmail.com>"]
-repository = "https://github.com/thricecola/Kovi"
+repository = "https://github.com/kovi-plugins/event-engine"
 readme = "README_Cargo.md"
-documentation = "https://thricecola.github.io/kovi-doc/"
-keywords = ["kovi", "onebot", "framework"]
+keywords = ["kovi", "onebot", "kovi-plugin"]
 
 [dependencies]
 ahash = "0.8.12"
