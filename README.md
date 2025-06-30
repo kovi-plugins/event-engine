@@ -33,7 +33,7 @@ async fn main() {
 
         let ctx = e.wait("notice").await.unwrap().unwrap();
 
-        let msg = ctx.downcast_ref::<String>().unwrap;
+        let msg = ctx.downcast_ref::<String>().unwrap();
 
         assert_eq!(msg, "我是一个值");
 
