@@ -47,7 +47,7 @@ impl<T: Event> Event for FlowGuard<T> {
 }
 
 impl<T: Event> FlowGuard<T> {
-    /// 等待特定通知, 会检查历史记录和未来通知
+    /// 等待特定通知, 会检查历史记录和未来通知，并带有超时
     pub async fn wait_with_timeout(
         &self,
         notice: impl AsRef<str>,
@@ -135,8 +135,8 @@ pub struct Context {
     any: Box<dyn Any + Send + Sync>,
 }
 impl Context {
-    /// 从上下文中获取一个值
-    pub fn get<T: 'static>(&self) -> Option<&T> {
+    /// 解析回原本的值
+    pub fn downcast_ref<T: 'static>(&self) -> Option<&T> {
         let boxed = &self.any;
         (&**boxed as &(dyn Any + 'static)).downcast_ref()
     }
@@ -217,7 +217,7 @@ mod tests {
         assert!(context.is_some());
 
         let ctx = context.unwrap();
-        let retrieved_value = ctx.get::<i32>();
+        let retrieved_value = ctx.downcast_ref::<i32>();
         assert!(retrieved_value.is_some());
         assert_eq!(*retrieved_value.unwrap(), 42i32);
     }
@@ -316,12 +316,12 @@ mod tests {
         let result1 = guard.wait("notice1").await;
         assert!(result1.is_ok());
         let ctx1 = result1.unwrap().unwrap();
-        assert_eq!(ctx1.get::<String>().unwrap(), "value1");
+        assert_eq!(ctx1.downcast_ref::<String>().unwrap(), "value1");
 
         let result2 = guard.wait("notice2").await;
         assert!(result2.is_ok());
         let ctx2 = result2.unwrap().unwrap();
-        assert_eq!(*ctx2.get::<i32>().unwrap(), 42);
+        assert_eq!(*ctx2.downcast_ref::<i32>().unwrap(), 42);
 
         let result3 = guard.wait("notice3").await;
         assert!(result3.is_ok());
@@ -342,12 +342,12 @@ mod tests {
         let context = result.unwrap().unwrap();
 
         // 尝试获取正确的类型
-        let string_val = context.get::<String>();
+        let string_val = context.downcast_ref::<String>();
         assert!(string_val.is_some());
         assert_eq!(string_val.unwrap(), "hello");
 
         // 尝试获取错误的类型
-        let int_val = context.get::<i32>();
+        let int_val = context.downcast_ref::<i32>();
         assert!(int_val.is_none());
     }
 

@@ -31,9 +31,9 @@ async fn main() {
     P::on(move |e: Arc<FlowGuard<MsgEvent>>| async move {
         e.send_value("notice", String::from("我是一个值"));
 
-        let context = e.wait("notice").await.unwrap();
+        let ctx = e.wait("notice").await.unwrap().unwrap();
 
-        let msg = context.get<String>().unwrap;
+        let msg = ctx.downcast_ref::<String>().unwrap;
 
         assert_eq!(msg, "我是一个值");
 
