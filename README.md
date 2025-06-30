@@ -23,7 +23,7 @@ async fn main() {
 }
 ```
 
-也可以用于发送接收传过来的值
+也可以用于发送接收任意值
 
 ```rust
 #[kovi::plugin]
