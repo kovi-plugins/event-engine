@@ -7,10 +7,20 @@ use std::{
     any::Any,
     sync::{Arc, Mutex},
 };
+use thiserror::Error;
 
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum WaitError {
+    #[error("Timeout")]
     Timeout,
+    #[error("The broadcast error: {0}")]
     Broadcast(broadcast::error::RecvError),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum SendError {
+    #[error("The notification was already sent")]
+    DuplicateNotice,
 }
 
 /// 流程守卫，用于确保事件按顺序执行
@@ -65,7 +75,7 @@ impl<T: Event> FlowGuard<T> {
             }
 
             _ = &mut timeout_fut => {
-                return Err(WaitError::Timeout);
+                Err(WaitError::Timeout)
             }
         }
     }
@@ -102,31 +112,49 @@ impl<T: Event> FlowGuard<T> {
         &self,
         notice: impl AsRef<str>,
         value: Option<V>,
-    ) {
+    ) -> Result<(), SendError> {
         let notice = notice.as_ref().to_string();
         let notice = Arc::new(notice);
 
-        let arc_value = match value {
-            Some(value) => Some(Arc::new(Context {
-                any: Box::new(value),
-            })),
-            None => None,
-        };
+        let arc_value = value.map(|v| Arc::new(Context { any: Box::new(v) }));
 
         let mut history = self.history.lock().unwrap();
+
+        if history.contains_key(&notice) {
+            return Err(SendError::DuplicateNotice);
+        }
+
         history.insert(notice.clone(), arc_value.clone());
         let _ = self.sender.send((notice, arc_value));
+
+        Ok(())
     }
 
     /// 发送无值通知
-    pub fn send(&self, notice: impl AsRef<str>) {
+    ///
+    /// # Error
+    ///
+    /// 如果这个通知已经被发送，这会返回`SendError::DuplicateNotice`
+    pub fn send(&self, notice: impl AsRef<str>) -> Result<(), SendError> {
         let none: Option<()> = None;
-        self.send_inner(notice, none);
+        self.send_inner(notice, none)?;
+
+        Ok(())
     }
 
     /// 发送带值通知
-    pub fn send_value<V: Any + Send + Sync>(&self, notice: impl AsRef<str>, value: V) {
-        self.send_inner(notice, Some(value));
+    ///
+    /// # Error
+    ///
+    /// 如果这个通知已经被发送，这会返回`SendError::DuplicateNotice`
+    pub fn send_value<V: Any + Send + Sync>(
+        &self,
+        notice: impl AsRef<str>,
+        value: V,
+    ) -> Result<(), SendError> {
+        self.send_inner(notice, Some(value))?;
+
+        Ok(())
     }
 }
 
@@ -191,7 +219,7 @@ mod tests {
         tokio::spawn(async move {
             // 稍微延迟一下，确保 wait 先开始
             tokio::time::sleep(Duration::from_millis(10)).await;
-            guard_for_send.send(notice_clone);
+            guard_for_send.send(notice_clone).unwrap();
         });
 
         // 等待通知
@@ -207,7 +235,7 @@ mod tests {
         let test_value = 42i32;
 
         // 发送带有上下文的通知
-        guard.send_value(notice, test_value);
+        guard.send_value(notice, test_value).unwrap();
 
         // 等待通知
         let result = guard.wait(notice).await;
@@ -228,7 +256,7 @@ mod tests {
         let notice = "historical_notice";
 
         // 先发送通知
-        guard.send(notice);
+        guard.send(notice).unwrap();
 
         // 然后等待，应该立即从历史记录中获取
         let result = guard.wait(notice).await;
@@ -247,7 +275,7 @@ mod tests {
 
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(50)).await;
-            guard_for_send.send(notice_clone);
+            guard_for_send.send(notice_clone).unwrap();
         });
 
         let result = guard.wait_with_timeout(notice, timeout).await;
@@ -288,7 +316,7 @@ mod tests {
 
         // 稍微延迟后发送通知
         tokio::time::sleep(Duration::from_millis(10)).await;
-        guard.send(notice);
+        guard.send(notice).unwrap();
 
         // 等待所有任务完成
         let mut success_count = 0;
@@ -308,9 +336,9 @@ mod tests {
         let guard = Arc::new(create_test_flow_guard());
 
         // 发送不同的通知
-        guard.send_value("notice1", "value1".to_string());
-        guard.send_value("notice2", 42i32);
-        guard.send("notice3");
+        guard.send_value("notice1", "value1".to_string()).unwrap();
+        guard.send_value("notice2", 42i32).unwrap();
+        guard.send("notice3").unwrap();
 
         // 等待不同的通知
         let result1 = guard.wait("notice1").await;
@@ -334,7 +362,7 @@ mod tests {
         let notice = "type_safety_test";
 
         // 发送一个字符串值
-        guard.send_value(notice, "hello".to_string());
+        guard.send_value(notice, "hello".to_string()).unwrap();
 
         let result = guard.wait(notice).await;
         assert!(result.is_ok());
@@ -367,7 +395,7 @@ mod tests {
             let sender_notice = notice.clone();
             sender_handles.push(tokio::spawn(async move {
                 tokio::time::sleep(Duration::from_millis(i * 10)).await;
-                sender_guard.send_value(sender_notice, i);
+                sender_guard.send_value(sender_notice, i).unwrap();
             }));
 
             // 等待者

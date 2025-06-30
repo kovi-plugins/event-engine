@@ -12,7 +12,7 @@
 #[kovi::plugin]
 async fn main() {
     P::on(move |e: Arc<FlowGuard<MsgEvent>>| async move {
-        e.send("notice");
+        e.send("notice").unwrap();
 
         e.wait("notice").await.unwrap();
 
@@ -29,7 +29,7 @@ async fn main() {
 #[kovi::plugin]
 async fn main() {
     P::on(move |e: Arc<FlowGuard<MsgEvent>>| async move {
-        e.send_value("notice", String::from("我是一个值"));
+        e.send_value("notice", String::from("我是一个值")).unwrap();
 
         let ctx = e.wait("notice").await.unwrap().unwrap();
 
